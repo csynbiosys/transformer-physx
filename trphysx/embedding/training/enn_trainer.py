@@ -13,10 +13,13 @@ import torch
 import numpy as np
 import argparse
 
+
+
 from typing import Dict, Tuple
 from torch.utils.data import DataLoader
 from ..embedding_model import EmbeddingTrainingHead
 from ...viz.viz_model import Viz
+from ...utils.metrics import Metrics
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +57,7 @@ class EmbeddingTrainer:
         self.args = args
         self.optimizers = optimizers
         self.viz = viz
+        self.log_metrics = Metrics(file_path = self.args.run_dir, file_name = "embedding_metrics.h5")
 
         # Load pre-trained state dictionaries if necessary
         if self.args.epoch_start > 0:
@@ -115,6 +119,9 @@ class EmbeddingTrainer:
             if(epoch%5 == 0 or epoch == 1):
                 output = self.evaluate(eval_dataloader, epoch=epoch)
                 logger.info('Epoch {:d}: Test loss: {:.02f}'.format(epoch, output['test_error']))
+                self.log_metrics.push(epoch=epoch, train_loss=float(loss_total.detach().cpu()), test_loss=float(output['test_error'].detach().cpu()))
+                self.log_metrics.writeToHDF5()
+
 
             # Save model checkpoint
             if epoch % self.args.save_steps == 0:
