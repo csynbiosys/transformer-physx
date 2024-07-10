@@ -25,6 +25,8 @@ from trphysx.embedding import EmbeddingModel
 from trphysx.config.configuration_phys import PhysConfig
 from trphysx.embedding import EmbeddingTrainingHead
 from trphysx.embedding.training import EmbeddingParser, EmbeddingDataHandler, EmbeddingTrainer
+# import KAN
+from fastkan import FastKAN as KAN
 
 Tensor = torch.Tensor
 TensorTuple = Tuple[torch.Tensor]
@@ -130,18 +132,20 @@ class RepressilatorEmbedding(EmbeddingModel):
         hidden_states = 500
 
         self.observableNet = nn.Sequential(
-            nn.Linear(config.state_dims[0], hidden_states),
-            nn.ReLU(),
-            nn.Linear(hidden_states, config.n_embd),
+            #nn.Linear(config.state_dims[0], hidden_states),
+            #nn.ReLU(),
+            #nn.Linear(hidden_states, config.n_embd),
+            KAN([config.state_dims[0], hidden_states,config.n_embd]),
             nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
             nn.Dropout(config.embd_pdrop)
         )
 
-        self.recoveryNet = nn.Sequential(
-            nn.Linear(config.n_embd, hidden_states),
-            nn.ReLU(),
-            nn.Linear(hidden_states, config.state_dims[0])
-        )
+        self.recoveryNet = KAN([config.n_embd, hidden_states,config.state_dims[0]])
+        #nn.Sequential(
+        #    nn.Linear(config.n_embd, hidden_states),
+        #    nn.ReLU(),
+        #    nn.Linear(hidden_states, config.state_dims[0])
+        #)
         # Learned koopman operator
         # Learns skew-symmetric matrix with a diagonal
         self.obsdim = config.n_embd
