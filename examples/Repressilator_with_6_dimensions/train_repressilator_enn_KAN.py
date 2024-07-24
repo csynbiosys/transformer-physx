@@ -26,7 +26,11 @@ from trphysx.config.configuration_phys import PhysConfig
 from trphysx.embedding import EmbeddingTrainingHead
 from trphysx.embedding.training import EmbeddingParser, EmbeddingDataHandler, EmbeddingTrainer
 # import KAN
-from fastkan import FastKAN as KAN
+#from fastkan import FastKAN as KAN
+from kan import KAN, KANLinear
+
+
+
 
 Tensor = torch.Tensor
 TensorTuple = Tuple[torch.Tensor]
@@ -51,6 +55,7 @@ argv = argv + ["--exp_name", exp_name]
 argv = argv + ["--exp_dir", exp_name+"/outputs"]
 argv = argv + ["--training_h5_file", train_path]
 argv = argv + ["--eval_h5_file", eval_path]
+argv = argv + ["--lr","0.0002"]
 argv = argv + ["--stride", "16"]
 argv = argv + ["--batch_size", "256"]
 argv = argv + ["--block_size", "16"]
@@ -93,7 +98,7 @@ class RepressilatorConfig(PhysConfig):
     def __init__(
         self,
         n_ctx=32,
-        n_embd=32,
+        n_embd=64,
         n_layer=4,
         n_head=4, # n_head must be a factor of n_embd
         state_dims=[6],
@@ -128,24 +133,23 @@ class RepressilatorEmbedding(EmbeddingModel):
         """
         super().__init__(config)
 
-        hidden_states = int(abs(config.state_dims[0] - config.n_embd)/2) + 1
+        #hidden_states = int(abs(config.state_dims[0] - config.n_embd)/2) + 1
         hidden_states = 500
-
         self.observableNet = nn.Sequential(
-            #nn.Linear(config.state_dims[0], hidden_states),
-            #nn.ReLU(),
-            #nn.Linear(hidden_states, config.n_embd),
-            KAN([config.state_dims[0], hidden_states,config.n_embd]),
+            #nn.LayerNorm(config.state_dims[0], eps=config.layer_norm_epsilon),
+            KANLinear(config.state_dims[0],50,grid_range=[-2,2],grid_size=10),
+            nn.LayerNorm(50, eps=config.layer_norm_epsilon),
+            KANLinear(50,config.n_embd,grid_range=[-2,2],grid_size=10),
             nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
             nn.Dropout(config.embd_pdrop)
         )
-
-        self.recoveryNet = KAN([config.n_embd, hidden_states,config.state_dims[0]])
-        #nn.Sequential(
-        #    nn.Linear(config.n_embd, hidden_states),
-        #    nn.ReLU(),
-        #    nn.Linear(hidden_states, config.state_dims[0])
-        #)
+        
+        self.recoveryNet = nn.Sequential(
+            nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
+            KANLinear(config.n_embd,50,grid_range=[-2,2],grid_size=10),
+            nn.LayerNorm(50, eps=config.layer_norm_epsilon),
+            KANLinear(50,config.state_dims[0],grid_range=[-2,2],grid_size=10)
+        )
         # Learned koopman operator
         # Learns skew-symmetric matrix with a diagonal
         self.obsdim = config.n_embd
@@ -164,6 +168,7 @@ class RepressilatorEmbedding(EmbeddingModel):
         self.register_buffer('mu', torch.tensor([0., 0., 0., 0., 0., 0.]))
         self.register_buffer('std', torch.tensor([1., 1., 1., 1., 1., 1.]))
         print('Number of embedding parameters: {}'.format( super().num_parameters ))
+        logger.info(f'Number of embedding parameters: {super().num_parameters}')
 
     def forward(self, x: Tensor) -> TensorTuple:
         """Forward pass
@@ -290,6 +295,7 @@ class RepressilatorEmbeddingTrainer(EmbeddingTrainingHead):
         mseLoss = nn.MSELoss()
 
         xin0 = states[:,0].to(device) # Time-step
+        
 
         # Model forward for both time-steps
         g0, xRec0 = self.embedding_model(xin0)
@@ -297,6 +303,7 @@ class RepressilatorEmbeddingTrainer(EmbeddingTrainingHead):
         loss_reconstruct = loss_reconstruct + mseLoss(xin0, xRec0).detach()
 
         g1_old = g0
+
         # Koopman transform
         for t0 in range(1, states.shape[1]):
             xin0 = states[:,t0,:].to(device) # Next time-step
@@ -329,16 +336,26 @@ class RepressilatorEmbeddingTrainer(EmbeddingTrainingHead):
         mseLoss = nn.MSELoss()
 
         # Pull out targets from prediction dataset
-        yTarget = states[:,1:].to(device)
+        #yTarget = states[:,1:].to(device)
+        yTarget = states[:,:-1].to(device)
         xInput = states[:,:-1].to(device)
         yPred = torch.zeros(yTarget.size()).to(device)
 
+ 
+        #xInput0 = xInput[:,0].to(device)
+        #g0 = self.embedding_model.embed(xInput0)
+        #yPred0 = self.embedding_model.recover(g0).detach()
+        #logger.info(f'x0 {xInput0}')
+        #logger.info(f'g0 {g0}')
+        #logger.info(f'xRec0 {yPred0}')
+
+        
         # Test accuracy of one time-step
         for i in range(xInput.size(1)):
             xInput0 = xInput[:,i].to(device)
             g0 = self.embedding_model.embed(xInput0)
-            yPred0 = self.embedding_model.recover(g0)
-            yPred[:,i] = yPred0.squeeze().detach()
+            yPred0 = self.embedding_model.recover(g0).detach()
+            yPred[:,i] = yPred0.squeeze()
 
         test_loss = mseLoss(yTarget, yPred)
 
@@ -479,7 +496,7 @@ class RepressilatorDataHandler(EmbeddingDataHandler):
             logger.warn('Lower batch-size to {:d}'.format(data.size(0)))
             batch_size = data.size(0)
 
-        data = (data - self.mu.unsqueeze(0).unsqueeze(0)) / self.std.unsqueeze(0).unsqueeze(0)
+        #data = (data - self.mu.unsqueeze(0).unsqueeze(0)) / self.std.unsqueeze(0).unsqueeze(0)
         dataset = self.RepressilatorDataset(data)
         data_collator = self.RepressilatorDataCollator()
         testing_loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, collate_fn=data_collator, num_workers=4,drop_last=False)
@@ -519,12 +536,16 @@ if args.epoch_start > 1:
 """Initialize optimizer and scheduler. Feel free to change if you want to experiment."""
 
 optimizer = torch.optim.Adam(model.parameters(), lr=args.lr*0.995**(args.epoch_start), weight_decay=1e-8)
+#optimizer = torch.optim.AdamW(model.parameters(),lr=1e-3,weight_decay=1e-4)
 scheduler = ExponentialLR(optimizer, gamma=0.995)
 
 """## Training the Embedding Model
 
 Train the model. No visualization here, just boring numbers. This notebook only trains for 100 epochs for brevity, feel free to train longer. The test loss here is only the recovery loss MSE(x - decode(encode(x))) and does not reflect the quality of the Koopman dynamics.
 """
+## model architecture
+## printing model architecture
+logger.info(model)
 
 trainer = EmbeddingTrainer(model, args, (optimizer, scheduler))
 trainer.train(training_loader, testing_loader)
