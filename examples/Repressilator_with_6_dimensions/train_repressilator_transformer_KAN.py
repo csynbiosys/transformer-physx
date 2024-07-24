@@ -22,7 +22,9 @@ from trphysx.data_utils.dataset_phys import PhysicalDataset
 from trphysx.transformer import PhysformerTrain, PhysformerGPT2
 from trphysx.utils.trainer import Trainer
 # import fast KAN
-from fastkan import FastKAN as KAN
+#from fastkan import FastKAN as KAN
+#from fastkan import FastKANLayer as KAN
+from kan import KAN, KANLinear
 
 Tensor = torch.Tensor
 TensorTuple = Tuple[torch.Tensor]
@@ -51,7 +53,7 @@ argv = argv + ["--embedding_file_or_path", embedding_path]
 argv = argv + ["--training_h5_file", train_path]
 argv = argv + ["--eval_h5_file", eval_path]
 argv = argv + ["--train_batch_size", "32"]
-argv = argv + ["--lr","0.0001"]
+argv = argv + ["--lr","0.0002"]
 argv = argv + ["--stride", "16"]
 argv = argv + ["--block_size", "32"]
 argv = argv + ["--n_train", "10240"]
@@ -62,7 +64,7 @@ argv = argv + ["--save_steps", "25"]
 
 
 logging.basicConfig(
-    filename=os.path.join(os.getcwd(),exp_name,'logging.log'),
+    filename=os.path.join(os.getcwd(),exp_name,'loggingT.log'),
     filemode='a',
     format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
     datefmt="%m/%d/%Y %H:%M:%S",
@@ -88,7 +90,7 @@ class RepressilatorConfig(PhysConfig):
     def __init__(
         self,
         n_ctx=32,
-        n_embd=32,
+        n_embd=64,
         n_layer=4,
         n_head=4, # n_head must be a factor of n_embd
         state_dims=[6],
@@ -127,22 +129,21 @@ class RepressilatorEmbedding(EmbeddingModel):
 
         hidden_states = int(abs(config.state_dims[0] - config.n_embd)/2) + 1
         hidden_states = 500
-
         self.observableNet = nn.Sequential(
-            #nn.Linear(config.state_dims[0], hidden_states),
-            #nn.ReLU(),
-            #nn.Linear(hidden_states, config.n_embd),
-            KAN([config.state_dims[0], hidden_states,config.n_embd]),
+            #nn.LayerNorm(config.state_dims[0], eps=config.layer_norm_epsilon),
+            KANLinear(config.state_dims[0],50,grid_range=[-2,2],grid_size=10),
+            nn.LayerNorm(50, eps=config.layer_norm_epsilon),
+            KANLinear(50,config.n_embd,grid_range=[-2,2],grid_size=10),
             nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
             nn.Dropout(config.embd_pdrop)
         )
-
-        self.recoveryNet = KAN([config.n_embd, hidden_states,config.state_dims[0]])
-        #nn.Sequential(
-        #    nn.Linear(config.n_embd, hidden_states),
-        #    nn.ReLU(),
-        #    nn.Linear(hidden_states, config.state_dims[0])
-        #)
+        
+        self.recoveryNet = nn.Sequential(
+            nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon),
+            KANLinear(config.n_embd,50,grid_range=[-2,2],grid_size=10),
+            nn.LayerNorm(50, eps=config.layer_norm_epsilon),
+            KANLinear(50,config.state_dims[0],grid_range=[-2,2],grid_size=10)
+        )
         # Learned koopman operator
         # Learns skew-symmetric matrix with a diagonal
         self.obsdim = config.n_embd
@@ -673,6 +674,8 @@ config = RepressilatorConfig()
 # Load embedding model
 embedding_model = RepressilatorEmbedding(config).to(training_args.src_device)
 embedding_model.load_model(model_args.embedding_file_or_path)
+
+logger.info(embedding_model)
 
 # Load visualization utility class
 viz = RepressilatorViz(training_args.plot_dir)
