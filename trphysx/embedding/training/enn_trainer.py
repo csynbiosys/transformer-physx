@@ -114,6 +114,7 @@ class EmbeddingTrainer:
                 cur_lr = param_group['lr']
                 break
             logger.info("Epoch {:d}: Training loss {:.03f}, Lr {:.05f}".format(epoch, loss_total, cur_lr))
+            logger.info(f'Loss of reconstruction {loss_reconstruct}')
 
             # Evaluate current model
             if(epoch%5 == 0 or epoch == 1):
@@ -152,4 +153,4 @@ class EmbeddingTrainer:
             if not self.viz is None and mbidx == 0:
                 self.viz.plotEmbeddingPrediction(state_pred, state_target, epoch=epoch)
 
-            return {'test_error': test_loss/len(eval_dataloader)}
+        return {'test_error': test_loss/len(eval_dataloader)}
