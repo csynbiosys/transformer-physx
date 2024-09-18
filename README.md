@@ -35,3 +35,111 @@ Find this useful or like this work? Cite us with:
     url = {https://www.sciencedirect.com/science/article/pii/S0893608021004500}
 }
 ```
+
+
+
+### Installation
+
+To install this repository, it is preferable to create a new conda environment. For example:
+
+```bash
+conda create -n your_environment_name python=3.9
+conda activate your_environment_name
+```
+
+Then, use the `setup.py` to install the basic requirements for setting up the environment:
+
+```bash
+pip install .
+# or
+python setup.py install
+```
+
+### Synthetic Data
+
+To generate synthetic data for the repressilator, Goodwin oscillator, or the SIR model, define the output file path, training, validation, and testing file names, the number of combinations, and the number of time series per combination. For example:
+
+```bash
+python Repressilator.py --output_path ./data --train_path training.hdf5 --valid_path validation.hdf5 --test_path testing.hdf5 -n 3 --num_samples 3000
+```
+
+### Repressilator Example
+
+There are 5 different experiments for the embedding and the GPT + Embedding for the repressilator model based on the architecture of the embedding model used. For the embedding models, provide the experiment name, the training data path, and the testing data path. For the transformer model, provide the experiment name, the training and validation data path, and the embedding model checkpoint. The 5 different experiments used are MLP network, KAN network, MLP+KAN network (mKAN), eKdM (encoder KAN decoder MLP), and eMdK (encoder MLP decoder KAN).
+
+#### MLP Network
+
+To run the embedding model:
+
+```bash
+python train_Repressilator_enn.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5
+```
+
+To run the transformer model:
+
+```bash
+python train_repressilator_transformer.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5 --embedding_file_or_path ./embeddingrepressilator300.pth
+```
+
+#### KAN Network
+
+To run the embedding model:
+
+```bash
+python train_repressilator_enn_eKAN.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5
+```
+
+To run the transformer model:
+
+```bash
+python train_repressilator_transformer_eKAN.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5 --embedding_file_or_path ./embeddingrepressilator300.pth
+```
+
+#### mKAN Network
+
+To run the embedding model:
+
+```bash
+python train_repressilator_enn_mKAN.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5
+```
+
+To run the transformer model:
+
+```bash
+python train_repressilator_transformer_mKAN.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5 --embedding_file_or_path ./embeddingrepressilator300.pth
+```
+
+#### eKdM
+
+To run the embedding model:
+
+```bash
+python train_repressilator_enn_eKdM.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5
+```
+
+To run the transformer model:
+
+```bash
+python train_repressilator_transformer_eKdM.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5 --embedding_file_or_path ./embeddingrepressilator300.pth
+```
+
+#### eMdK
+
+To run the embedding model:
+
+```bash
+python train_repressilator_enn_eMdK.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5
+```
+
+To run the transformer model:
+
+```bash
+python train_repressilator_transformer_eMdK.py --exp_name exp --train ./training_file.hdf5 --eval ./valid.hdf5 --embedding_file_or_path ./embeddingrepressilator300.pth
+```
+
+**Note:** To speed up training when using the GPT model, the dataset is transformed using the embedding model and cached for faster training. When trying different configurations for the GPT model using the same embedding model, the cached file name is the same for the MLP, KAN, and mKAN models. For the eKdM and eMdK models, the cached file name is also the same. It is advisable to remove the cached file when training different models.
+
+### Evaluation for the Repressilator Models
+
+To evaluate the embedding model based on different isotropic measures, Jaccard, and hit rate measures, and to measure the reconstruction and prediction rate, follow the steps in the `Embedding_Evaluation.ipynb` file. For comparison of the different embedding models and GPT models, use the steps in `Architectures_Evaluation.ipynb`.
+
